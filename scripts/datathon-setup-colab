@@ -1,0 +1,86 @@
+import os
+
+SPARK_VERSION  = "3.0.0"
+JAVA_VERSION   = "11"
+AUT_VERSION    = "0.91.0"
+
+GRAPHFRAME_VERSION = "0.8.2"
+GRAPHFRAME_SCALA_VERSION = "2.12"
+
+
+#------------------------------------------
+# Folders
+#------------------------------------------
+APPS_HOME = "apps"
+APPS_HOME = os.path.join(os.getcwd(), APPS_HOME)
+!mkdir -p "$APPS_HOME"
+!rm -rf sample_data   #remove colab default folder
+
+
+#------------------------------------------
+# JAVA JDK
+#------------------------------------------
+!sudo apt-get update
+!sudo apt-get install -y openjdk-"$JAVA_VERSION"-jdk-headless
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-{}-openjdk-amd64".format(JAVA_VERSION)
+
+
+#------------------------------------------
+# SPARK
+#------------------------------------------
+!pip install "pyspark==$SPARK_VERSION" findspark
+SPARK_HOME = !python -c "import pyspark as _; print(_.__path__)"
+SPARK_HOME = SPARK_HOME[0][2:-2]
+os.environ["SPARK_HOME"] = SPARK_HOME
+
+
+#------------------------------------------
+# ARCHIVES UNLEASHED TOOLKIT
+#------------------------------------------
+!wget https://github.com/archivesunleashed/aut/releases/download/aut-"$AUT_VERSION"/aut-"$AUT_VERSION".zip
+!wget https://github.com/archivesunleashed/aut/releases/download/aut-"$AUT_VERSION"/aut-"$AUT_VERSION"-fatjar.jar
+!mv aut-* "$APPS_HOME"
+
+
+#------------------------------------------
+# GRAPHFRAME lib
+#------------------------------------------
+GRAPHFRAME_SPARK_VERSION = "{}-spark{}-s_{}".format(GRAPHFRAME_VERSION, SPARK_VERSION[:-2], GRAPHFRAME_SCALA_VERSION)
+
+!wget https://repos.spark-packages.org/graphframes/graphframes/"$GRAPHFRAME_SPARK_VERSION"/graphframes-"$GRAPHFRAME_SPARK_VERSION".jar
+!jar -xf   graphframes-"$GRAPHFRAME_SPARK_VERSION".jar graphframes
+!zip -q -r graphframes-"$GRAPHFRAME_SPARK_VERSION".zip graphframes
+!rm -r graphframes
+!mv graphframes-* "$APPS_HOME"
+
+
+#------------------------------------------
+# SPARK init
+#------------------------------------------
+import findspark
+
+SPARK_DRIVER_MEMORY   = "8g"
+
+JARS     = !find "$APPS_HOME" -maxdepth 1 -iname "*.jar"
+PY_FILES = !find "$APPS_HOME" -maxdepth 1 -iname "*.zip"
+
+os.environ['PYSPARK_SUBMIT_ARGS'] = "--driver-memory {} --jars {} --py-files {} pyspark-shell".format(
+    SPARK_DRIVER_MEMORY, 
+    ",".join(JARS), 
+    ",".join(PY_FILES)
+)
+
+findspark.init()
+
+
+#------------------------------------------
+# SPARK session
+#------------------------------------------
+from pyspark.sql import SparkSession
+from pyspark.sql import SQLContext
+
+spark      = SparkSession.builder.master("local[*]").getOrCreate()
+
+# Definition of variables for backward compability with the AUT toolkit
+sqlContext = SQLContext(spark.sparkContext, sparkSession=spark)
+sc = spark
